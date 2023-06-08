@@ -7,6 +7,7 @@ BK_CACHE_COMPRESS=${BUILDKITE_PLUGIN_CACHE_COMPRESS:-false}
 BK_CACHE_COMPRESS_PROGRAM=${BUILDKITE_PLUGIN_CACHE_COMPRESS_PROGRAM:-gzip}
 BK_CACHE_SAVE_CACHE=${BUILDKITE_PLUGIN_CACHE_S3_SAVE_CACHE:-false}
 BK_ALWAYS_CACHE=${BUILDKITE_PLUGIN_CACHE_ALWAYS:-false}
+BK_RESTORE_ONLY=${BUILDKITE_PLUGIN_CACHE_RESTORE_ONLY:-false}
 BK_CACHE_LOCAL_PATH="/tmp"
 BK_TAR_ARGS=()
 BK_TAR_ADDITIONAL_ARGS="--ignore-failed-read"
@@ -121,31 +122,33 @@ function restore() {
 }
 
 function cache() {
-  TAR_FILE="${CACHE_KEY}.${BK_TAR_EXTENSION}"
-  BUCKET="${BUILDKITE_PLUGIN_CACHE_S3_BUCKET}/${BUILDKITE_ORGANIZATION_SLUG}/$(pipeline_slug)"
-  TAR_TARGETS=""
+  if [[ ! "${BK_RESTORE_ONLY:-false}" =~ (false) ]]; then
+    TAR_FILE="${CACHE_KEY}.${BK_TAR_EXTENSION}"
+    BUCKET="${BUILDKITE_PLUGIN_CACHE_S3_BUCKET}/${BUILDKITE_ORGANIZATION_SLUG}/$(pipeline_slug)"
+    TAR_TARGETS=""
 
-  if [ "${#paths[@]}" -eq 1 ]; then
-    TAR_TARGETS="${paths[*]}"
-  elif
-    [ "${#paths[@]}" -gt 1 ]
-  then
-    TAR_TARGETS="${paths[@]}"
-  fi
+    if [ "${#paths[@]}" -eq 1 ]; then
+      TAR_TARGETS="${paths[*]}"
+    elif
+      [ "${#paths[@]}" -gt 1 ]
+    then
+      TAR_TARGETS="${paths[@]}"
+    fi
 
-  cache_locating "${TAR_TARGETS}"
-  TAR_FILE="${CACHE_KEY}.${BK_TAR_EXTENSION}"
+    cache_locating "${TAR_TARGETS}"
+    TAR_FILE="${CACHE_KEY}.${BK_TAR_EXTENSION}"
 
-  if [ $BK_ALWAYS_CACHE == "true" ]; then
-    echo -e "${BK_LOG_PREFIX}:file_cabinet::close: Removing previously found cache ${TAR_FILE} since always is true."
+    if [ $BK_ALWAYS_CACHE == "true" ]; then
+      echo -e "${BK_LOG_PREFIX}:file_cabinet::close: Removing previously found cache ${TAR_FILE} since always is true."
+      rm -f "${TAR_FILE}"
+    fi
+
+    if [ ! -f "$TAR_FILE" ]; then
+      TMP_FILE="$(mktemp)"
+      tar "${BK_TAR_ARGS[@]}" "${TMP_FILE}" ${TAR_TARGETS}
+      mv -f "${TMP_FILE}" "${TAR_FILE}"
+      aws s3 cp ${BK_CUSTOM_AWS_ARGS} "${TAR_FILE}" "s3://${BUCKET}/${TAR_FILE}"
+    fi
     rm -f "${TAR_FILE}"
   fi
-
-  if [ ! -f "$TAR_FILE" ]; then
-    TMP_FILE="$(mktemp)"
-    tar "${BK_TAR_ARGS[@]}" "${TMP_FILE}" ${TAR_TARGETS}
-    mv -f "${TMP_FILE}" "${TAR_FILE}"
-    aws s3 cp ${BK_CUSTOM_AWS_ARGS} "${TAR_FILE}" "s3://${BUCKET}/${TAR_FILE}"
-  fi
-  rm -f "${TAR_FILE}"
 }

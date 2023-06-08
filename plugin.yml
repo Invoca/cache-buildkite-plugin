@@ -23,6 +23,8 @@ configuration:
       type: boolean
     always:
       type: boolean
+    restore_only:
+      type: boolean
     pipeline-slug-override:
       type: string
     pr:
