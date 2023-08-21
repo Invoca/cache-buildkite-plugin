@@ -454,6 +454,30 @@ steps:
         continue_on_error: true # Cache will be made even build fails.
 ```
 
+## Do not exit on error when restoring cache
+
+Larger cache can occasionally loose some data if there is any packet loss or network connectivity errors while downloading cached files causing cache to get corrupted. The `continue_on_restore_error` option allows the plugin to continue to run the buildkite command step without restoring cache and not fail the entire build step.
+
+```yaml
+steps:
+  - name: ':jest: Run tests'
+    key: jest
+    command: yarn test --runInBand
+    plugins:
+      - nienbo/cache#v2.4.14:
+        id: ruby # or ruby-3.0
+        backend: s3
+        key: "v1-cache-{{ id }}-{{ runner.os }}-{{ checksum 'Gemfile.lock' }}"
+        restore-keys:
+          - 'v1-cache-{{ id }}-{{ runner.os }}-'
+          - 'v1-cache-{{ id }}-'
+        s3:
+          bucket: s3-bucket
+        paths:
+          - bundle/vendor
+        continue_on_restore_error: true # Any errors occured during restore will not fail the pre-command step and continue to the run the step command without restored cache.
+```
+
 ## Multi-threaded compression
 
 You can benefit tar's `compress-program` option to allow multi-threaded compression. Thus, all you need to pass this option to the plugin as below:
